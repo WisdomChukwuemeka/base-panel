@@ -171,6 +171,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 MEDIA_URL = 'api/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
+
 try:
     from .deployment_settings import *
 except ImportError:
