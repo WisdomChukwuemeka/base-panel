@@ -13,8 +13,8 @@ if RENDER_EXTERNAL_HOSTNAME:
     CSRF_TRUSTED_ORIGINS.append('https://' + RENDER_EXTERNAL_HOSTNAME)
 else:
     # Fallback for development / debugging
-    ALLOWED_HOSTS += ['localhost', '127.0.0.1', 'publication-brown.onrender.com']
-    CSRF_TRUSTED_ORIGINS += ['https://scholar-ra71-15zs4o88h-wisdom-chukwuemekas-projects.vercel.app']
+    ALLOWED_HOSTS += ['localhost', '127.0.0.1', 'base-panel-3.onrender.com']
+    CSRF_TRUSTED_ORIGINS += ['https://base-panel-3.onrender.com', 'https://scholar-ra71-15zs4o88h-wisdom-chukwuemekas-projects.vercel.app']
 
 
 

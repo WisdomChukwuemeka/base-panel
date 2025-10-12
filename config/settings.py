@@ -72,6 +72,12 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3001",
 ]
 
+# CSRF_TRUSTED_ORIGINS = [
+#     'https://base-panel-3.onrender.com',
+#     'https://scholar-ra71-15zs4o88h-wisdom-chukwuemekas-projects.vercel.app'
+# ]
+
+
 ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
