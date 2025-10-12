@@ -12,8 +12,10 @@ if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
     CSRF_TRUSTED_ORIGINS.append('https://' + RENDER_EXTERNAL_HOSTNAME)
 else:
-    ALLOWED_HOSTS = ['localhost', '127.0.0.1']
-    CSRF_TRUSTED_ORIGINS = ['http://localhost:8000']
+    # Fallback for development / debugging
+    ALLOWED_HOSTS += ['localhost', '127.0.0.1', 'publication-brown.onrender.com']
+    CSRF_TRUSTED_ORIGINS += ['http://localhost:8000', 'https://publication-brown.onrender.com']
+
 
 
 DEBUG = False
@@ -33,7 +35,7 @@ MIDDLEWARE = [
 
 
 CORS_ALLOWED_ORIGINS = [
-    "https://publication-brown.vercel.app/",
+    "https://publication-brown.vercel.app",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
