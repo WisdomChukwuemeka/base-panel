@@ -14,7 +14,7 @@ if RENDER_EXTERNAL_HOSTNAME:
 else:
     # Fallback for development / debugging
     ALLOWED_HOSTS += ['localhost', '127.0.0.1', 'publication-brown.onrender.com']
-    CSRF_TRUSTED_ORIGINS += ['https://scholar-ra71-15zs4o88h-wisdom-chukwuemekas-projects.vercel.app/']
+    CSRF_TRUSTED_ORIGINS += ['https://scholar-ra71-15zs4o88h-wisdom-chukwuemekas-projects.vercel.app']
 
 
 
