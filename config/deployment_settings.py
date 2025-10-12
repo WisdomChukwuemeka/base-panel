@@ -35,7 +35,7 @@ MIDDLEWARE = [
 
 
 CORS_ALLOWED_ORIGINS = [
-    "https://scholar-ra71-15zs4o88h-wisdom-chukwuemekas-projects.vercel.app/",
+    "https://scholar-ra71-15zs4o88h-wisdom-chukwuemekas-projects.vercel.app",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
