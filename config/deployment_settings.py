@@ -14,7 +14,7 @@ if RENDER_EXTERNAL_HOSTNAME:
 else:
     # Fallback for development / debugging
     ALLOWED_HOSTS += ['localhost', '127.0.0.1', 'base-panel-3.onrender.com']
-    CSRF_TRUSTED_ORIGINS += ['https://base-panel-3.onrender.com', 'https://scholar-ra71-15zs4o88h-wisdom-chukwuemekas-projects.vercel.app']
+    CSRF_TRUSTED_ORIGINS += ['https://base-panel-3.onrender.com', 'https://scholar-ra71.vercel.app']
 
 
 
@@ -35,7 +35,7 @@ MIDDLEWARE = [
 
 
 CORS_ALLOWED_ORIGINS = [
-    "https://scholar-ra71-15zs4o88h-wisdom-chukwuemekas-projects.vercel.app",
+    "https://scholar-ra71.vercel.app",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
