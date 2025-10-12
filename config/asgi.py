@@ -16,6 +16,6 @@ settings_module = (
     if "RENDER_EXTERNAL_HOSTNAME" in os.environ
     else "config.settings"
 )
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", settings_module)
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", 'config.settings')
 
 application = get_asgi_application()
