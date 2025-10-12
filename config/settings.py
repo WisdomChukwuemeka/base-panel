@@ -67,7 +67,7 @@ MIDDLEWARE = [
 
 
 CSRF_TRUSTED_ORIGINS = [
-    "https://publication-brown.vercel.app",
+    # "https://publication-brown.vercel.app",
     "http://localhost:3000",
     "http://localhost:3001",
 ]
