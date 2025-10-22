@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 load_dotenv()
 from corsheaders.defaults import default_headers
 import logging
+from decouple import config
 
 # Load environment variables
 load_dotenv()
@@ -34,16 +35,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECRET_KEY = os.getenv('SECRET_KEY')
 SECRET_KEY = os.getenv('SECRET_KEY', "django-insecure-gzj350!03v(a7d(lmcj3@!ra93fvdx$x4tr0zz_o0s^ejp!s+k")  # Updated to use env, with fallback
 
-# DEBUG = os.getenv('DEBUG', 'False') == 'True'
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
+# DEBUG = True
 
 # SECURITY WARNING: don't run with debug turned on in production!
 
 ALLOWED_HOSTS = []  # For production, add your domains e.g., ['yourdomain.com', '.vercel.app']
 
 # Add to settings.py (assuming it's not there)
-PAYSTACK_SECRET_KEY = os.getenv('PAYSTACK_SECRET_KEY')
-PAYSTACK_PUBLIC_KEY = os.getenv('PAYSTACK_PUBLIC_KEY')
+PAYSTACK_PUBLIC_KEY = config("PAYSTACK_PUBLIC_KEY")
+PAYSTACK_SECRET_KEY = config("PAYSTACK_SECRET_KEY")
 # Application definition
 if not PAYSTACK_SECRET_KEY or not PAYSTACK_PUBLIC_KEY:
     raise ValueError("PAYSTACK_SECRET_KEY and PAYSTACK_PUBLIC_KEY must be set in the .env file")
@@ -97,10 +98,10 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
 ]
 
 
-# CSRF_TRUSTED_ORIGINS = [
-#     'https://base-panel-3.onrender.com',
-#     'https://scholar-ra71-15zs4o88h-wisdom-chukwuemekas-projects.vercel.app'
-# ]
+CSRF_TRUSTED_ORIGINS = [
+    'https://base-panel-3.onrender.com',
+    'https://scholar-ra71-15zs4o88h-wisdom-chukwuemekas-projects.vercel.app'
+]
 
 
 ROOT_URLCONF = 'config.urls'
