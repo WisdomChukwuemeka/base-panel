@@ -24,7 +24,7 @@ urlpatterns = [
     path('api/', include("accounts.urls")),
     path('api/', include("userprofile.urls")),
     path('api/', include("publications.urls")),
-    # path('api/', include("payments.urls")),
+    path('api/', include('payments.urls')),
     # path('api/', include("comments.urls")),
 ]
 

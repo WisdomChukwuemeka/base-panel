@@ -15,6 +15,12 @@ from datetime import timedelta
 import os
 from dotenv import load_dotenv
 load_dotenv()
+from corsheaders.defaults import default_headers
+import logging
+
+# Load environment variables
+load_dotenv()
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,16 +31,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 
-SECRET_KEY = os.getenv('SECRET_KEY')
+# SECRET_KEY = os.getenv('SECRET_KEY')
+SECRET_KEY = os.getenv('SECRET_KEY', "django-insecure-gzj350!03v(a7d(lmcj3@!ra93fvdx$x4tr0zz_o0s^ejp!s+k")  # Updated to use env, with fallback
 
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
+# DEBUG = os.getenv('DEBUG', 'False') == 'True'
+DEBUG = True
 
 # SECURITY WARNING: don't run with debug turned on in production!
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = []  # For production, add your domains e.g., ['yourdomain.com', '.vercel.app']
 
-
+# Add to settings.py (assuming it's not there)
+PAYSTACK_SECRET_KEY = os.getenv('PAYSTACK_SECRET_KEY')
+PAYSTACK_PUBLIC_KEY = os.getenv('PAYSTACK_PUBLIC_KEY')
 # Application definition
+if not PAYSTACK_SECRET_KEY or not PAYSTACK_PUBLIC_KEY:
+    raise ValueError("PAYSTACK_SECRET_KEY and PAYSTACK_PUBLIC_KEY must be set in the .env file")
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -43,13 +55,15 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'cloudinary_storage',  # Added for Cloudinary media storage
+    'cloudinary',  # Added for Cloudinary SDK
     'rest_framework',
     'corsheaders',
     'rest_framework_simplejwt',
     'accounts',
     'userprofile',
     'publications',
-    # 'payments',
+    'payments',
     # 'comments',
 ]
 
@@ -71,6 +85,17 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:3001",
 ]
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+]
+
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'contenttype',
+    'authorization',
+]
+
 
 # CSRF_TRUSTED_ORIGINS = [
 #     'https://base-panel-3.onrender.com',
@@ -98,7 +123,7 @@ TEMPLATES = [
 AUTH_USER_MODEL = "accounts.User"
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=10),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
 
@@ -108,11 +133,14 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,
+    'DEFAULT_RENDERER_CLASSES': (
+        'rest_framework.renderers.JSONRenderer',
+    ),  # Enforce JSON responses
+    'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
 }
 
 
     
-
 
 
 WSGI_APPLICATION = 'config.wsgi.application'
@@ -153,7 +181,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Africa/Lagos'
 
 USE_I18N = True
 
@@ -175,8 +203,38 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Media files (uploads)
 MEDIA_URL = 'api/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')  # Comment this out in production: # MEDIA_ROOT = ...
 
+
+# Added: Cloudinary configuration
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': os.getenv('CLOUDINARY_CLOUD_NAME'),
+    'API_KEY': os.getenv('CLOUDINARY_API_KEY'),
+    'API_SECRET': os.getenv('CLOUDINARY_API_SECRET'),
+    'SECURE': True,  # Enforces HTTPS for production security
+}
+# Logging configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        '': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+    },
+}
+
+# Optional: If most uploads are images, set this default (override per-field for videos/raw as needed)
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+
+PAYSTACK_SECRET_KEY = os.getenv('PAYSTACK_SECRET_KEY')
 
 try:
     from .deployment_settings import *

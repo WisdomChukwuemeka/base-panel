@@ -76,7 +76,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     REQUIRED_FIELDS = []
 
     def __str__(self):
-        return self.full_name if self.full_name else self.email
+        return self.full_name or self.email
+    
+    def get_full_name(self):
+        return self.full_name or self.email
+
 
 
 class Passcode(models.Model):

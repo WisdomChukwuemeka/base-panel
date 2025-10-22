@@ -2,7 +2,9 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.conf import settings
+from cloudinary_storage.storage import MediaCloudinaryStorage, VideoMediaCloudinaryStorage, RawMediaCloudinaryStorage
 import uuid
+
 
 
 User = get_user_model()
@@ -42,10 +44,11 @@ def generate_short_id():
 
 class Publication(models.Model):
     STATUS_CHOICES = [
-        ('pending', 'Pending'),
+        ('draft', 'Draft'),
         ('under_review', 'Under Review'),
+        ('rejected', 'Rejected'),
+        ('needs_revision', 'Needs Revision'),
         ('approved', 'Approved'),
-        ('rejected', 'Rejected')
     ]
 
     id = models.CharField(
@@ -57,20 +60,21 @@ class Publication(models.Model):
     title = models.CharField(max_length=255)
     abstract = models.TextField()
     content = models.TextField(blank=True)
-    file = models.FileField(upload_to='publications/', blank=True)
-    video_file = models.FileField(upload_to='video/', blank=True)
+    is_free_review = models.BooleanField(default=False)  # Added field
+    file = models.FileField(upload_to='publications/', blank=True, storage=RawMediaCloudinaryStorage())
+    video_file = models.FileField(upload_to='videos/', blank=True, storage=VideoMediaCloudinaryStorage())
     author = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
         related_name='publications'
     )
-    categories = models.ManyToManyField(Category, blank=True)
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, null=True,  blank=True)
     keywords = models.TextField(blank=True, help_text="Comma-separated list of keywords (e.g., machine learning, AI)")
     views = models.PositiveIntegerField(default=0)
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
-        default='pending'
+        default='draft'
     )
     editor = models.ForeignKey(
         User,
@@ -79,6 +83,7 @@ class Publication(models.Model):
         blank=True,
         related_name='edited_publications'
     )
+    rejection_count = models.PositiveIntegerField(default=0)
     rejection_note = models.TextField(blank=True, null=True)
     publication_date = models.DateTimeField(default=timezone.now)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -171,7 +176,8 @@ class Views(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     user_liked = models.BooleanField(default=False)
     user_disliked = models.BooleanField(default=False)
-
+    viewed = models.BooleanField(default=False)  # Add this field
+    
     class Meta:
         unique_together = ('publication', 'user')
 

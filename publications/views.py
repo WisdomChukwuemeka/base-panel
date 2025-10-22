@@ -1,224 +1,283 @@
-from rest_framework import generics, permissions
+from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework import status
 from django.shortcuts import get_object_or_404
-from .models import Publication, Notification, Category, User, Views
-from .serializers import PublicationSerializer, NotificationSerializer, ViewsSerializer
 from django.db.models import Q
+from rest_framework import serializers
+from .models import Publication, Notification, Views
+from .serializers import PublicationSerializer, NotificationSerializer, ViewsSerializer
+from payments.models import Payment, Subscription
+from .pagination import StandardResultsPagination, DashboardResultsPagination
 from django.utils import timezone
-from rest_framework.permissions import IsAuthenticated
-from .pagination import StandardResultsPagination, DashboardResultsPagination  # import pagination class
+from django.db import transaction
+import logging
+from accounts.models import User
 
+logger = logging.getLogger(__name__)
 
-
+# Custom permission for editors or authors
 class IsAuthorOrEditor(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
-        # Editors can view everything
         if request.user.role == 'editor':
             return True
+        return obj.author == request.user
 
-        # Author can view their own publication
-        if obj.author == request.user:
-            return True
-
-        # Everyone else can only see approved publications
-        return obj.status == 'approved'
-
+class IsEditor(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return request.user.role == 'editor'
 
 class PublicationListCreateView(generics.ListCreateAPIView):
-    queryset = Publication.objects.all()
     serializer_class = PublicationSerializer
+    pagination_class = StandardResultsPagination
     permission_classes = [permissions.IsAuthenticated]
-    pagination_class = DashboardResultsPagination  
-    
-
 
     def get_queryset(self):
         user = self.request.user
-        queryset = Publication.objects.all()
-
-        # Filter by keywords if provided in query parameters
-        keywords = self.request.query_params.get('keywords', None)
-        if keywords:
-            # Split keywords by comma and create Q objects for each
-            keyword_list = [k.strip() for k in keywords.split(',') if k.strip()]
-            keyword_queries = Q()
-            for keyword in keyword_list:
-                keyword_queries |= (
-                    Q(keywords__icontains=keyword) |
-                    Q(title__icontains=keyword) |
-                    Q(abstract__icontains=keyword)
-                )
-            queryset = queryset.filter(keyword_queries)
-
+        search = self.request.query_params.get('search', None)
         if user.role == 'editor':
-            return queryset
-        return queryset.filter(Q(author=user) | Q(status='approved'))
+            return Publication.objects.all()  # Editors see all publications
+        else: 
+            queryset = Publication.objects.filter(
+                Q(author=user) | Q(status='approved')
+            )  # Authors and others see their own + approved publications
 
+        # Optional search filter
+        if search:
+            queryset = queryset.filter(
+                Q(title__icontains=search) |
+                Q(abstract__icontains=search) |
+                Q(author__full_name__icontains=search)
+            )
+        return queryset
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        serializer.save(author=self.request.user, status='draft')  # Changed to 'draft' initially
+        logger.info(f"Publication created by {self.request.user.full_name}: {serializer.instance.id}")
 
-class PublicationDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Publication.objects.all()
+class PublicationDetailView(generics.RetrieveAPIView):
     serializer_class = PublicationSerializer
+    pagination_class = StandardResultsPagination
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'pk'
+
+    def get_queryset(self):
+        user = self.request.user
+        logger.info(f"User: {user.full_name}, Role: {user.role}, Fetching publication with pk: {self.kwargs.get('pk')}")
+        if user.role == 'editor':
+            return Publication.objects.all()
+        return Publication.objects.filter(
+            Q(author=user) | Q(status='approved')
+        )
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        logger.info(f"Retrieved publication: {instance.id}, views: {getattr(instance, 'views', 'N/A')}")
+        try:
+            view, created = Views.objects.get_or_create(publication=instance, user=request.user)
+            if created or not view.viewed:
+                views_attr = getattr(instance, 'views', None)
+                if views_attr is None:
+                    raise AttributeError("Publication model missing 'views' field")
+                instance.views += 1
+                view.viewed = True
+                view.save()
+                instance.save()
+            serializer = self.get_serializer(instance)
+            return Response(serializer.data)
+        except AttributeError as e:
+            logger.error(f"AttributeError in retrieve: {str(e)}")
+            return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            logger.error(f"Unexpected error in retrieve: {str(e)}")
+            return Response({"detail": "An unexpected error occurred"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class PublicationUpdateView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = PublicationSerializer
+    pagination_class = StandardResultsPagination
     permission_classes = [permissions.IsAuthenticated, IsAuthorOrEditor]
-    pagination_class = StandardResultsPagination  # keep if you need it
-    lookup_field = 'pk'  # <-- MUST be a string, not a list
+    lookup_field = 'id'
 
-    def get_object(self):
-        publication = super().get_object()
+    def get_queryset(self):
         user = self.request.user
-        # ensure view record increments only once per user
-        if not Views.objects.filter(publication=publication, user=user).exists():
-            publication.views += 1
-            publication.save(update_fields=["views"])
-        return publication
+        if user.role == 'editor':
+            return Publication.objects.all()
+        return Publication.objects.filter(author=user)
 
+    def validate_status_transition(self, instance, new_status):
+        valid_transitions = {
+            'draft': ['pending'],
+            'pending': ['under_review'],
+            'under_review': ['approved', 'rejected'],
+            'rejected': ['pending'],
+            'approved': []
+        }
+        if new_status != instance.status and new_status not in valid_transitions.get(instance.status, []):
+            raise serializers.ValidationError({
+                "status": f"Cannot transition from {instance.status} to {new_status}."
+            })
+
+    @transaction.atomic
     def perform_update(self, serializer):
-        user = self.request.user
-        data = self.request.data
-        status_value = data.get('status')
-        rejection_note = data.get('rejection_note', '').strip() or None
+        instance = serializer.instance
+        old_status = instance.status
+        new_status = serializer.validated_data.get('status', old_status)
+        is_free_review = serializer.validated_data.get('is_free_review', instance.is_free_review)
+        rejection_note = serializer.validated_data.get('rejection_note', instance.rejection_note)
 
-        # Check if the publication is rejected and prevent updates
-        if serializer.instance.status == 'rejected' and user.role == 'editor':
-            raise ValueError("Rejected publications cannot be changed or updated.")
+        # Validate status transition
+        self.validate_status_transition(instance, new_status)
 
-        # Editor updating status
-        if user.role == 'editor' and status_value:
-            instance = serializer.save(editor=user, status=status_value)
+        # Log update details
+        logger.info(f"Updating publication {instance.id} by user {self.request.user.id} ({self.request.user.full_name}): "
+                    f"status={new_status}, fields={list(serializer.validated_data.keys())}")
 
-            if status_value == 'rejected':
-                instance.rejection_note = rejection_note
-                instance.save(update_fields=['rejection_note'])
-                note_msg = f"Reason: {rejection_note}" if rejection_note else "No rejection note provided."
+        # Validate editor actions
+        if self.request.user.role == 'editor':
+            if new_status not in ['under_review', 'approved', 'rejected']:
+                raise serializers.ValidationError({
+                    "status": "Editors can only set status to 'under_review', 'approved', or 'rejected'."
+                })
+            if new_status == 'rejected' and not rejection_note:
+                raise serializers.ValidationError({
+                    "rejection_note": "A rejection note is required when rejecting a publication."
+                })
+            if new_status == 'rejected':
+                instance.rejection_count += 1
+            if not instance.editor:
+                instance.editor = self.request.user
+            if new_status == 'approved':
+                instance.publication_date = timezone.now()
+
+        # Handle author submission/resubmission (set to 'pending')
+        elif self.request.user == instance.author and new_status == 'pending':
+            if instance.rejection_count == 0:
+                payment = Payment.objects.filter(
+                    user=self.request.user,
+                    payment_type='publication_fee',
+                    metadata__publication_id=str(instance.id),
+                    status='success',
+                    used=False
+                ).first()
+                if not payment:
+                    raise serializers.ValidationError({
+                        "status": "Payment for publication fee (₦25,000) is required for initial submission."
+                    })
+                payment.used = True
+                payment.save()
+                sub, created = Subscription.objects.get_or_create(user=self.request.user)
+                sub.free_reviews_granted = True
+                sub.save()
             else:
-                instance.rejection_note = None
-                instance.save(update_fields=['rejection_note'])
-                note_msg = ""
+                if is_free_review:
+                    sub, created = Subscription.objects.get_or_create(user=self.request.user)
+                    if not sub.has_free_review_available():
+                        raise serializers.ValidationError({
+                            "is_free_review": "No free reviews available."
+                        })
+                    sub.use_free_review()
+                else:
+                    payment = Payment.objects.filter(
+                        user=self.request.user,
+                        payment_type='review_fee',
+                        metadata__publication_id=str(instance.id),
+                        status='success',
+                        used=False
+                    ).first()
+                    if not payment:
+                        raise serializers.ValidationError({
+                            "status": "Payment for review fee (₦3,000) is required after free reviews are exhausted."
+                        })
+                    payment.used = True
+                    payment.save()
 
-            # Notify the author
-            message = (
-                f"Your publication '{instance.title}' status changed to '{status_value}' "
-                f"at {timezone.now().strftime('%I:%M %p WAT, %B %d, %Y')}."
-            )
+        # Save editor-specific fields (other fields handled by serializer.update)
+        serializer.save(
+            editor=instance.editor,
+            publication_date=instance.publication_date,
+            rejection_count=instance.rejection_count
+        )
+        print(serializer.errors)  # Add this
+
+        # Create notification for status change
+        if new_status != old_status:
+            message = f"Your publication '{instance.title}' has been {new_status.replace('_', ' ')}."
+            if new_status == 'rejected' and rejection_note:
+                message += f" Reason: {rejection_note}"
             Notification.objects.create(
                 user=instance.author,
                 message=message,
                 related_publication=instance
             )
+            logger.info(f"Notification created for {instance.author.full_name}: {message}")
 
-            # Notify other editors (excluding the current editor)
-            editors = User.objects.filter(role='editor').exclude(id=user.id)
-            for editor in editors:
-                Notification.objects.create(
-                    user=editor,
-                    message=(
-                        f"Publication '{instance.title}' status updated to '{status_value}' "
-                        f"by {user.full_name} at {timezone.now().strftime('%I:%M %p WAT, %B %d, %Y')}."
-                    ),
-                    related_publication=instance
-                )
+            # Notify other editors if approved, rejected, or under_review
+            if new_status in ['approved', 'rejected', 'under_review'] and self.request.user.role == 'editor':
+                editors = User.objects.filter(role='editor').exclude(id=self.request.user.id)
+                notifications = [
+                    Notification(
+                        user=editor,
+                        message=(
+                            f"Publication '{instance.title}' was {new_status} by "
+                            f"{self.request.user.full_name} at {timezone.now().strftime('%I:%M %p WAT, %B %d, %Y')}."
+                            + (f" Reason: {rejection_note}" if new_status == 'rejected' and rejection_note else "")
+                        ),
+                        related_publication=instance
+                    )
+                    for editor in editors
+                ]
+                Notification.objects.bulk_create(notifications)
+                logger.info(f"Notifications created for {len(notifications)} editors")
 
-            return Response(
-                {"message": "Publication status updated successfully.", "rejection_note": rejection_note},
-                status=status.HTTP_200_OK
-            )
+class ViewsUpdateView(generics.UpdateAPIView):
+    serializer_class = ViewsSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = None
 
-        # Author editing their own publication
-        elif user == serializer.instance.author:
-            serializer.save()
-            return Response({"message": "Publication updated successfully."}, status=status.HTTP_200_OK)
-
-        else:
-            raise permissions.PermissionDenied("Only editors can change publication status.")
-
+    def get_object(self):
+        publication = get_object_or_404(Publication, id=self.kwargs['pk'])
+        view, created = Views.objects.get_or_create(publication=publication, user=self.request.user)
+        return view
 
 class NotificationListView(generics.ListAPIView):
     serializer_class = NotificationSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = DashboardResultsPagination
 
     def get_queryset(self):
-        return Notification.objects.filter(user=self.request.user)
+        return Notification.objects.filter(user=self.request.user).order_by('-created_at')
 
 class NotificationMarkReadView(generics.UpdateAPIView):
-    queryset = Notification.objects.all()
     serializer_class = NotificationSerializer
     permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'pk'
 
     def get_queryset(self):
         return Notification.objects.filter(user=self.request.user)
-    
 
-class ViewsUpdateView(generics.GenericAPIView):
-    serializer_class = ViewsSerializer
+    def perform_update(self, serializer):
+        serializer.save(is_read=True)
+
+class NotificationUnreadView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
-    def patch(self, request, *args, **kwargs):
-        publication_id = self.kwargs.get("pk")
-        publication = get_object_or_404(Publication, pk=publication_id)
-        action = request.data.get("action")
+    def get(self, request):
+        count = Notification.objects.filter(user=request.user, is_read=False).count()
+        return Response({'unread_count': count})
 
-        if action not in ["like", "dislike"]:
-            return Response(
-                {"error": "Invalid action. Use 'like' or 'dislike'."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # ✅ FIXED defaults
-        view_obj, created = Views.objects.get_or_create(
-            publication=publication,
-            user=request.user,
-            defaults={"user_liked": False, "user_disliked": False}
-        )
-
-        if action == "like":
-            if view_obj.user_liked:
-                return Response({"error": "You have already liked this publication."},
-                                status=status.HTTP_400_BAD_REQUEST)
-            view_obj.user_liked = True
-            view_obj.user_disliked = False
-
-        elif action == "dislike":
-            if view_obj.user_disliked:
-                return Response({"error": "You have already disliked this publication."},
-                                status=status.HTTP_400_BAD_REQUEST)
-            view_obj.user_disliked = True
-            view_obj.user_liked = False
-
-        view_obj.save(update_fields=["user_liked", "user_disliked"])
-
-        data = {
-            "publication_id": publication.id,
-            "user": request.user.id,
-            "action": action,
-            "total_likes": publication.total_likes(),
-            "total_dislikes": publication.total_dislikes(),
-        }
-
-        return Response(data, status=status.HTTP_200_OK)
-
-class NotificationUnreadView(generics.ListAPIView):
-    serializer_class = NotificationSerializer
-    permission_classes = [permissions.IsAuthenticated] 
-
-    def get_queryset(self):
-        user = self.request.user
-        if user.is_anonymous:
-            return Notification.objects.none()
-        return Notification.objects.filter(user=user, is_read=False).order_by('-created_at')
-    
 class NotificationMarkAllReadView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
 
-    def patch(self, request):
-        # Get all unread notifications for the current user
-        notifications = Notification.objects.filter(user=request.user, is_read=False)
-        if not notifications.exists():
-            return Response({"message": "No unread notifications to mark as read."}, status=status.HTTP_200_OK)
+    def post(self, request):
+        Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+        return Response({'detail': 'All notifications marked as read.'}, status=status.HTTP_200_OK)
 
-        # Mark all notifications as read
-        notifications.update(is_read=True)
-        return Response({"message": "All notifications marked as read."}, status=status.HTTP_200_OK)
+class FreeReviewStatusView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        sub, _ = Subscription.objects.get_or_create(user=request.user)
+        return Response({
+            'free_reviews_granted': sub.free_reviews_granted,
+            'free_reviews_used': sub.free_reviews_used,
+            'has_free_review_available': sub.has_free_review_available()
+        })
