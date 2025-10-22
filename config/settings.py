@@ -33,8 +33,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 
 # SECRET_KEY = os.getenv('SECRET_KEY')
-SECRET_KEY = os.getenv('SECRET_KEY', "django-insecure-gzj350!03v(a7d(lmcj3@!ra93fvdx$x4tr0zz_o0s^ejp!s+k")  # Updated to use env, with fallback
-
+# SECRET_KEY = os.getenv('SECRET_KEY', "django-insecure-gzj350!03v(a7d(lmcj3@!ra93fvdx$x4tr0zz_o0s^ejp!s+k")  # Updated to use env, with fallback
+SECRET_KEY = os.getenv('SECRET_KEY')  # Updated to use env, with fallback
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
 # DEBUG = True
 
@@ -43,8 +43,8 @@ DEBUG = os.getenv('DEBUG', 'False') == 'True'
 ALLOWED_HOSTS = []  # For production, add your domains e.g., ['yourdomain.com', '.vercel.app']
 
 # Add to settings.py (assuming it's not there)
-PAYSTACK_PUBLIC_KEY = config("PAYSTACK_PUBLIC_KEY")
-PAYSTACK_SECRET_KEY = config("PAYSTACK_SECRET_KEY")
+PAYSTACK_PUBLIC_KEY = config("PAYSTACK_PUBLIC_KEY", default="")
+PAYSTACK_SECRET_KEY = config("PAYSTACK_SECRET_KEY", default="")
 # Application definition
 if not PAYSTACK_SECRET_KEY or not PAYSTACK_PUBLIC_KEY:
     raise ValueError("PAYSTACK_SECRET_KEY and PAYSTACK_PUBLIC_KEY must be set in the .env file")
