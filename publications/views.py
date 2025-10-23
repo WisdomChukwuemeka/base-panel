@@ -12,6 +12,8 @@ from django.utils import timezone
 from django.db import transaction
 import logging
 from accounts.models import User
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,10 @@ class PublicationListCreateView(generics.ListCreateAPIView):
     serializer_class = PublicationSerializer
     pagination_class = StandardResultsPagination
     permission_classes = [permissions.IsAuthenticated]
+    
+    @method_decorator(csrf_exempt)  # Add this
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
 
     def get_queryset(self):
         user = self.request.user

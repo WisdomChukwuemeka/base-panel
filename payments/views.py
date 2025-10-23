@@ -16,11 +16,17 @@ import logging
 from decimal import Decimal
 from django.urls import reverse
 from accounts.models import User
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 
 logger = logging.getLogger(__name__)
 
 class InitializePublicationPaymentView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    
+    @method_decorator(csrf_exempt)  # Add this
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
 
     def post(self, request):
         serializer = InitializePaymentSerializer(data=request.data, context={'request': request})
