@@ -46,8 +46,8 @@ ALLOWED_HOSTS = []  # For production, add your domains e.g., ['yourdomain.com', 
 PAYSTACK_PUBLIC_KEY = config("PAYSTACK_PUBLIC_KEY", default="")
 PAYSTACK_SECRET_KEY = config("PAYSTACK_SECRET_KEY", default="")
 # Application definition
-# if not PAYSTACK_SECRET_KEY or not PAYSTACK_PUBLIC_KEY:
-#     raise ValueError("PAYSTACK_SECRET_KEY and PAYSTACK_PUBLIC_KEY must be set in the .env file")
+if not PAYSTACK_SECRET_KEY or not PAYSTACK_PUBLIC_KEY:
+    raise ValueError("PAYSTACK_SECRET_KEY and PAYSTACK_PUBLIC_KEY must be set in the .env file")
 
 INSTALLED_APPS = [
     'django.contrib.admin',
