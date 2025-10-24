@@ -83,6 +83,7 @@ MIDDLEWARE = [
 
 CSRF_TRUSTED_ORIGINS = [
     # "https://publication-brown.vercel.app",
+    "https://scholar-ra71.vercel.app", 
     "http://localhost:3000",
     "http://localhost:3001",
 ]
@@ -90,6 +91,7 @@ CSRF_TRUSTED_ORIGINS = [
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:3001",
+    "https://scholar-ra71.vercel.app", 
 ]
 
 CORS_ALLOW_HEADERS = list(default_headers) + [
